@@ -1,6 +1,6 @@
 {
   "name": "react-native-metro-port",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Makes debug builds connect to the Metro port your project is really using, on iOS and Android, even with prebuilt React Core.",
   "keywords": [
     "react-native",

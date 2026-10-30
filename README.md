@@ -42,7 +42,7 @@ process.env.RCT_METRO_PORT = '8088';
 module.exports = {};
 ```
 
-If the file already exists, add just the first line and keep your `module.exports`.
+If your project already has this file, or a `.cjs`, `.ts` or `.mjs` version of it, add just the first line to that file.
 
 Now `yarn start`, `yarn ios`, `yarn android`, Xcode and Android Studio all use port 8088, and Metro no longer has to be running before you build. Commit the file and your team gets the same port.
 
@@ -75,11 +75,11 @@ You probably do if you've seen any of these while working on more than one proje
 
 ## How it works
 
-1. **It finds your Metro during the build.** It starts with the port you chose, from `--port` or your fixed port. If that Metro is yours, or nothing is running there yet, it uses that port. Otherwise it asks each Metro on ports 8081–8090 which project it belongs to, using the `X-React-Native-Project-Root` header.
+1. **It finds your Metro during the build.** It starts with the port you chose, from `--port` or your fixed port. If that Metro is yours, it uses that port. If not, it asks each Metro on ports 8081–8090 which project it belongs to, using the `X-React-Native-Project-Root` header, and uses yours. If none is yours, it keeps the port you chose, because Metro may not have started yet.
 2. **On Android, it connects USB devices.** It runs `adb reverse` for that port on every connected device.
 3. **It tells the app at launch.** A small debug-only hook writes the port to the same setting the dev menu uses: `jsLocation` on iOS and `debug_http_host` on Android. The bundle, Fast Refresh and the terminal's reload command all follow it.
 
-If your Metro is on 8081, or no Metro is found, nothing is set and React Native behaves as it always does.
+If you didn't choose a port, and your Metro is on 8081 or no Metro is found, nothing is set and React Native behaves as it always does.
 
 ## Check that it worked
 
@@ -94,7 +94,7 @@ note: react-native-metro-port: no custom port, leaving React Native's default in
 
 - **Release builds.** The port search and the startup hook only run in debug builds. On iOS the pod isn't linked into Release. On Android a release app contains one empty class, because autolinking requires it, and that class does nothing.
 - **App launch.** It makes no network calls at launch. The port is decided during the build.
-- **Your dev menu choice.** An address you set by hand stays in place. Clear it to hand control back.
+- **Your dev menu choice.** An address you set by hand stays in place. On Android, clear it in Change Bundle Location to hand control back. On iOS, Reset to Default doesn't remove it, so delete the app and install it again.
 
 ## Limitations
 
