@@ -1,0 +1,83 @@
+apply plugin: 'com.android.library'
+
+def safeExtGet = { prop, fallback ->
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+def generatedRes = layout.buildDirectory.dir('generated/rn-metro-port/res').get().asFile
+
+android {
+  if (project.android.hasProperty('namespace')) {
+    namespace 'com.rnmetroport'
+  }
+  compileSdkVersion safeExtGet('compileSdkVersion', 35)
+
+  defaultConfig {
+    minSdkVersion safeExtGet('minSdkVersion', 24)
+  }
+
+  // Only the debug variant gets the port and the code that reads it.
+  sourceSets {
+    debug {
+      res.srcDirs += generatedRes
+    }
+  }
+}
+
+dependencies {
+  implementation 'com.facebook.react:react-native:+'
+}
+
+// Declares no outputs on purpose. Without them the task runs on every build, which it
+// must because Metro's port can change without any source file changing, and Gradle
+// doesn't reject the resources task for reading a file this task writes. The file is
+// only touched when the port differs, so an unchanged port rebuilds nothing.
+def resolveMetroPort = tasks.register('resolveMetroPort') {
+  def resFile = new File(generatedRes, 'values/rn_metro_port.xml')
+  def script = file('../scripts/resolve-metro-port.sh')
+  def projectRoot = rootProject.projectDir.parentFile
+  def givenPort = findProperty('reactNativeDevServerPort')?.toString()
+  def localProperties = rootProject.file('local.properties')
+
+  doLast {
+    if (!resFile.exists()) {
+      resFile.parentFile.mkdirs()
+      resFile.text = '<resources><integer name="rn_metro_port">0</integer></resources>\n'
+    }
+
+    // A convenience must never fail the build. Without bash, as on most Windows
+    // machines, the app simply keeps React Native's default.
+    try {
+      def properties = new Properties()
+      if (localProperties.exists()) {
+        localProperties.withInputStream { properties.load(it) }
+      }
+      def sdk = properties.getProperty('sdk.dir') ?: System.getenv('ANDROID_HOME') ?: System.getenv('ANDROID_SDK_ROOT')
+
+      // To a file, not a pipe: adb can leave a daemon behind that holds a pipe open.
+      def output = new File(resFile.parentFile.parentFile.parentFile, 'resolve-metro-port.log')
+      def builder = new ProcessBuilder('bash', script.path).redirectErrorStream(true).redirectOutput(output)
+      def env = builder.environment()
+      env.put('PROJECT_ROOT', projectRoot.path)
+      env.put('RN_METRO_PORT_ANDROID_RES', resFile.path)
+      env.put('ADB', sdk ? new File(sdk, 'platform-tools/adb').path : 'adb')
+      if (givenPort) {
+        env.put('RCT_METRO_PORT', givenPort)
+      } else {
+        env.remove('RCT_METRO_PORT')
+      }
+
+      def process = builder.start()
+      if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
+        process.destroyForcibly()
+      }
+      println output.text.trim()
+    } catch (Exception e) {
+      logger.info("react-native-metro-port: skipped ($e)")
+    }
+  }
+}
+
+tasks.matching { it.name == 'preDebugBuild' }.configureEach {
+  dependsOn resolveMetroPort
+}
