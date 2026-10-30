@@ -50,7 +50,8 @@ after(closeServers);
 function run(env = {}) {
   const { RCT_METRO_PORT: _, ...parentEnv } = process.env;
   return new Promise((resolve, reject) => {
-    const child = spawn('bash', [SCRIPT], {
+    // /bin/bash on macOS is the 3.2 that Xcode runs the script with.
+    const child = spawn(process.platform === 'darwin' ? '/bin/bash' : 'bash', [SCRIPT], {
       env: {
         ...parentEnv,
         PODS_ROOT: path.join(projectRoot, 'ios', 'Pods'),
@@ -214,6 +215,41 @@ test('ignores a computed port and searches instead', async () => {
   await fakeMetro(SCAN_START + 1, projectRoot);
   await run();
   assert.match(header(), define(SCAN_START + 1));
+});
+
+test("prefers this project's Metro over a given port that reports no project", async () => {
+  await fakeMetro(SCAN_START);
+  await fakeMetro(SCAN_START + 1, projectRoot);
+  await run({ RCT_METRO_PORT: String(SCAN_START) });
+  assert.match(header(), define(SCAN_START + 1));
+});
+
+test('reads the fixed port from every config file the CLI loads', async () => {
+  for (const extension of ['cjs', 'ts', 'mjs']) {
+    const file = path.join(projectRoot, `react-native.config.${extension}`);
+    fs.writeFileSync(file, `process.env.RCT_METRO_PORT = '${SCAN_START + 2}';\n`);
+    await run();
+    assert.match(header(), define(SCAN_START + 2));
+    fs.rmSync(file);
+    fs.rmSync(path.join(derivedDir, 'RNMetroPortConfig.h'));
+  }
+});
+
+test('finds a Metro whose project path is not ASCII', async () => {
+  projectRoot = path.join(projectRoot, 'تطبيق my app');
+  fs.mkdirSync(path.join(projectRoot, 'ios', 'Pods'), { recursive: true });
+  await fakeMetro(SCAN_START + 1, encodeURI(projectRoot));
+  await run();
+  assert.match(header(), define(SCAN_START + 1));
+});
+
+test('does not mistake a dead port for this project when the root is missing', async () => {
+  const result = await run({
+    PODS_ROOT: path.join(projectRoot, 'missing', 'ios', 'Pods'),
+    RN_METRO_PORT_DEFAULT: '8081',
+  });
+  assert.equal(result.status, 0);
+  assert.doesNotMatch(header(), /#define/);
 });
 
 test('does nothing in a configuration without DEBUG', async () => {

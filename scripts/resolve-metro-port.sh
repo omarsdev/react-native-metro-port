@@ -15,7 +15,8 @@
 #      that may be another project's Metro.
 #   3. The port the build was given, if nothing better turned up. Metro may not have
 #      started yet, or it may be too old to report its root (before React Native
-#      0.73), and then there's nothing to check it against.
+#      0.73), and then there's nothing to check it against. A server that reports no
+#      root isn't enough on its own: it may be another project's old Metro.
 #
 # A convenience must never fail the build, so this always exits 0 and there is no
 # `set -e`.
@@ -76,7 +77,7 @@ resolve_port() {
   fi
 
   given_root="$(metro_project_root "$given_port")"
-  if [[ "$given_root" == "$project_root" || "$given_root" == unknown ]]; then
+  if [[ "$given_root" == "$project_root" ]]; then
     echo "$given_port"
     return
   fi
@@ -86,7 +87,7 @@ resolve_port() {
     echo "$found"
     return
   fi
-  if [[ -n "$given_root" ]]; then
+  if [[ -n "$given_root" && "$given_root" != unknown ]]; then
     warn "port $given_port belongs to another project ($given_root) and this project's Metro wasn't found"
   fi
   echo "$given_port"
@@ -97,7 +98,11 @@ resolve_port() {
 # own line counts: anything computed falls through to the search for this project's
 # Metro, and so does a commented-out line.
 configured_port() {
-  local config="$project_root/react-native.config.js"
+  local extension config
+  for extension in js cjs ts mjs; do # The order the CLI looks for them.
+    config="$project_root/react-native.config.$extension"
+    [[ -f "$config" ]] && break
+  done
   [[ -f "$config" ]] || return 0
   sed -nE "s/^[[:space:]]*process\.env\.RCT_METRO_PORT[[:space:]]*=[[:space:]]*['\"]?([0-9]+)['\"]?[[:space:]]*;?[[:space:]]*(\/\/.*)?\$/\1/p" "$config" \
     | head -n 1
@@ -149,6 +154,8 @@ if [[ -n "${PROJECT_ROOT:-}" ]]; then
 else
   project_root="$(cd "${PODS_ROOT}/../.." && pwd -P)"
 fi
+# Never empty: metro_project_root prints nothing for a dead port, which would match.
+project_root="${project_root:-unresolved}"
 
 given_port="${RCT_METRO_PORT:-}"
 if [[ -n "$given_port" && ! "$given_port" =~ ^[0-9]+$ ]]; then
