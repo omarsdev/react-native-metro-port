@@ -172,6 +172,50 @@ test('leaves an unchanged header alone so nothing recompiles', async () => {
   assert.match(header(), define(SCAN_START + 2));
 });
 
+const setPort = (line) =>
+  fs.writeFileSync(path.join(projectRoot, 'react-native.config.js'), `${line}\nmodule.exports = {};\n`);
+
+test('uses the port set in react-native.config.js before Metro has started', async () => {
+  setPort(`process.env.RCT_METRO_PORT = '${SCAN_START + 2}';`);
+  await run();
+  assert.match(header(), define(SCAN_START + 2));
+});
+
+test('reads the port with double quotes, no quotes and a trailing comment', async () => {
+  for (const value of [`"${SCAN_START + 2}"`, `${SCAN_START + 2}`]) {
+    setPort(`  process.env.RCT_METRO_PORT = ${value}; // this project`);
+    await run();
+    assert.match(header(), define(SCAN_START + 2));
+  }
+});
+
+test('a port passed to the build beats react-native.config.js', async () => {
+  setPort(`process.env.RCT_METRO_PORT = '${SCAN_START + 2}';`);
+  await run({ RCT_METRO_PORT: String(SCAN_START + 3) });
+  assert.match(header(), define(SCAN_START + 3));
+});
+
+test("prefers this project's Metro over a configured port that is another project's", async () => {
+  setPort(`process.env.RCT_METRO_PORT = '${SCAN_START + 1}';`);
+  await fakeMetro(SCAN_START + 1, '/Users/someone/other-app');
+  await fakeMetro(SCAN_START + 2, projectRoot);
+  await run();
+  assert.match(header(), define(SCAN_START + 2));
+});
+
+test('ignores a commented-out port', async () => {
+  setPort(`// process.env.RCT_METRO_PORT = '${SCAN_START + 2}';`);
+  await run();
+  assert.doesNotMatch(header(), /#define/);
+});
+
+test('ignores a computed port and searches instead', async () => {
+  setPort(`process.env.RCT_METRO_PORT = String(${SCAN_START + 2});`);
+  await fakeMetro(SCAN_START + 1, projectRoot);
+  await run();
+  assert.match(header(), define(SCAN_START + 1));
+});
+
 test('does nothing in a configuration without DEBUG', async () => {
   await fakeMetro(SCAN_START + 1, projectRoot);
   const result = await run({ GCC_PREPROCESSOR_DEFINITIONS: 'POD_CONFIGURATION_RELEASE=1  COCOAPODS=1' });
@@ -248,6 +292,15 @@ test('android: reverses nothing when no Metro was found', async () => {
   const { adb, calls } = fakeAdb('List of devices attached\nR58M\tdevice\n\n');
   await android({ ADB: adb });
   assert.equal(calls(), '');
+});
+
+test('android: reverses a configured port before Metro has started', async () => {
+  setPort(`process.env.RCT_METRO_PORT = '${SCAN_START + 2}';`);
+  const { adb, calls } = fakeAdb('List of devices attached\nR58M\tdevice\n\n');
+  const result = await android({ ADB: adb });
+  const port = SCAN_START + 2;
+  assert.match(result.resource(), new RegExp(`name="rn_metro_port">${port}<`));
+  assert.equal(calls(), `-s R58M reverse tcp:${port} tcp:${port}\n`);
 });
 
 test('android: a missing adb does not fail the build', async () => {
