@@ -5,9 +5,11 @@
 #
 # Order of preference:
 #   1. The port the build was given, if the Metro there is this project's. That's
-#      RCT_METRO_PORT from `react-native run-ios` or reactNativeDevServerPort from
-#      `react-native run-android`. It can be wrong: before CLI 20.2 both commands
-#      kept the old port after you accepted the "use another port?" prompt.
+#      RCT_METRO_PORT from `react-native run-ios`, reactNativeDevServerPort from
+#      `react-native run-android`, or a port set in the project's
+#      react-native.config.js, which is the only one Xcode and Android Studio see.
+#      It can be wrong: before CLI 20.2 both commands kept the old port after you
+#      accepted the "use another port?" prompt.
 #   2. The Metro that reports this project as its root. A plain Xcode or Android
 #      Studio build is given no port, and "something answers on 8081" isn't enough:
 #      that may be another project's Metro.
@@ -90,6 +92,17 @@ resolve_port() {
   echo "$given_port"
 }
 
+# A build from Xcode or Android Studio doesn't load react-native.config.js, so the
+# line that sets the port for the CLI is read here as text. Only a plain number on its
+# own line counts: anything computed falls through to the search for this project's
+# Metro, and so does a commented-out line.
+configured_port() {
+  local config="$project_root/react-native.config.js"
+  [[ -f "$config" ]] || return 0
+  sed -nE "s/^[[:space:]]*process\.env\.RCT_METRO_PORT[[:space:]]*=[[:space:]]*['\"]?([0-9]+)['\"]?[[:space:]]*;?[[:space:]]*(\/\/.*)?\$/\1/p" "$config" \
+    | head -n 1
+}
+
 write_if_changed() {
   mkdir -p "$(dirname "$1")"
   if [[ ! -f "$1" ]] || [[ "$(cat "$1")" != "$2" ]]; then
@@ -141,6 +154,9 @@ given_port="${RCT_METRO_PORT:-}"
 if [[ -n "$given_port" && ! "$given_port" =~ ^[0-9]+$ ]]; then
   warn "ignoring invalid RCT_METRO_PORT '$given_port'"
   given_port=""
+fi
+if [[ -z "$given_port" ]]; then
+  given_port="$(configured_port)"
 fi
 
 port="$(resolve_port)"
