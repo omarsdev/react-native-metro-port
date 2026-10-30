@@ -1,0 +1,34 @@
+{
+  "name": "react-native-metro-port",
+  "version": "0.1.0",
+  "description": "Makes iOS debug builds connect to the Metro port your project is really using, even with prebuilt React Core.",
+  "keywords": [
+    "react-native",
+    "ios",
+    "metro",
+    "port",
+    "8081",
+    "RCT_METRO_PORT",
+    "prebuilt"
+  ],
+  "homepage": "https://github.com/omarsdev/react-native-metro-port#readme",
+  "bugs": "https://github.com/omarsdev/react-native-metro-port/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omarsdev/react-native-metro-port.git"
+  },
+  "license": "MIT",
+  "author": "Omar Sukarieh",
+  "files": [
+    "ios",
+    "scripts",
+    "react-native-metro-port.podspec",
+    "react-native.config.js"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.80.0"
+  }
+}
